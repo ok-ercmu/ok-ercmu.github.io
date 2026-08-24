@@ -1,0 +1,980 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ER Shift Check</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Sarabun:wght@400;500;600;700&family=IBM+Plex+Mono:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg:#F5F7F7;
+    --surface:#FFFFFF;
+    --surface-2:#EEF2F2;
+    --ink:#1B2A2E;
+    --ink-muted:#5C6B6E;
+    --line:#DCE3E3;
+    --teal:#0F6E63;
+    --teal-dark:#0A4E46;
+    --navy:#1E3A5F;
+    --ok:#157A44;
+    --ok-bg:#E7F5EC;
+    --warn:#B45309;
+    --warn-bg:#FDF1E1;
+    --danger:#B0281E;
+    --danger-bg:#FBE9E7;
+    --idle:#9AA5A5;
+    --idle-bg:#EEF1F1;
+    --radius:12px;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    font-family:'Sarabun',sans-serif;
+    background:var(--bg);
+    color:var(--ink);
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  button{font-family:inherit;}
+  a{color:inherit;}
+
+  /* ---------- App shell ---------- */
+  .appbar{
+    position:sticky; top:0; z-index:20;
+    background:var(--teal-dark);
+    color:#fff;
+    padding:14px 16px;
+    box-shadow:0 2px 8px rgba(10,40,36,0.18);
+  }
+  .appbar-inner{
+    max-width:900px; margin:0 auto;
+    display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  .appbar-title{
+    display:flex; align-items:center; gap:10px; margin-right:auto;
+  }
+  .appbar-tag{
+    width:34px;height:34px;border-radius:8px;
+    background:linear-gradient(155deg,#2AA98C,#0F6E63);
+    display:flex;align-items:center;justify-content:center;
+    font-family:'IBM Plex Mono',monospace; font-weight:600; font-size:13px;
+    color:#EAFBF4; flex:none;
+    box-shadow:inset 0 0 0 1px rgba(255,255,255,0.15);
+  }
+  .appbar-title h1{font-size:16px; margin:0; font-weight:700; line-height:1.2;}
+  .appbar-title span{display:block; font-size:11.5px; color:#BFE3D9; font-weight:500;}
+
+  .ctrl{
+    display:flex; align-items:center; gap:6px;
+    background:rgba(255,255,255,0.08);
+    border:1px solid rgba(255,255,255,0.18);
+    border-radius:9px; padding:4px 8px;
+  }
+  .ctrl label{font-size:11px; color:#BFE3D9; font-weight:600; white-space:nowrap;}
+  .ctrl input, .ctrl select{
+    border:none; background:transparent; color:#fff; font-family:inherit;
+    font-size:13.5px; font-weight:600; padding:4px 2px; outline:none;
+  }
+  .ctrl select option{color:#111;}
+  .ctrl input[type="date"]{color-scheme:dark;}
+
+  .container{max-width:900px; margin:0 auto; padding:16px;}
+
+  /* ---------- Dashboard ---------- */
+  .summary-strip{
+    display:flex; align-items:center; justify-content:space-between;
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:12px 16px; margin-bottom:14px;
+  }
+  .summary-strip .big{
+    font-family:'IBM Plex Mono',monospace; font-size:22px; font-weight:600; color:var(--teal-dark);
+  }
+  .summary-strip .lbl{font-size:12.5px; color:var(--ink-muted); font-weight:600;}
+  .dot-legend{display:flex; gap:14px; font-size:12px; color:var(--ink-muted);}
+  .dot-legend span{display:inline-flex; align-items:center; gap:5px;}
+  .led{width:9px;height:9px;border-radius:50%; display:inline-block; flex:none;}
+  .led.ok{background:var(--ok);}
+  .led.warn{background:var(--danger);}
+  .led.idle{background:var(--idle);}
+
+  .grid{
+    display:grid; grid-template-columns:repeat(2,1fr); gap:10px;
+  }
+  @media (min-width:620px){ .grid{grid-template-columns:repeat(3,1fr);} }
+
+  .tile{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px 12px; text-align:left; cursor:pointer;
+    position:relative; overflow:hidden;
+    transition:transform .12s ease, box-shadow .12s ease;
+    display:flex; flex-direction:column; gap:8px; min-height:96px;
+  }
+  .tile:hover{box-shadow:0 4px 14px rgba(15,110,99,0.14); transform:translateY(-1px);}
+  .tile:focus-visible{outline:3px solid var(--teal); outline-offset:2px;}
+  .tile-top{display:flex; align-items:flex-start; justify-content:space-between; gap:6px;}
+  .tile-id{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--ink-muted); font-weight:600; letter-spacing:.02em;}
+  .tile-name{font-size:14.5px; font-weight:700; line-height:1.25; color:var(--ink);}
+  .tile-status{
+    font-size:11px; font-weight:600; display:flex; align-items:center; gap:5px;
+    padding:3px 8px; border-radius:20px; align-self:flex-start;
+  }
+  .tile-status.ok{background:var(--ok-bg); color:var(--ok);}
+  .tile-status.warn{background:var(--danger-bg); color:var(--danger);}
+  .tile-status.idle{background:var(--idle-bg); color:#6B7676;}
+  .tile-meta{font-size:11px; color:var(--ink-muted); margin-top:auto;}
+
+  /* ---------- Detail view ---------- */
+  .backrow{display:flex; align-items:center; gap:10px; margin-bottom:12px;}
+  .backbtn{
+    display:flex; align-items:center; gap:6px;
+    background:var(--surface); border:1px solid var(--line); border-radius:9px;
+    padding:8px 12px; font-size:13.5px; font-weight:600; color:var(--teal-dark); cursor:pointer;
+  }
+  .backbtn:hover{background:var(--surface-2);}
+
+  .detail-head{
+    background:var(--surface); border:1px solid var(--line); border-radius:var(--radius);
+    padding:16px; margin-bottom:14px;
+  }
+  .detail-head h2{margin:0 0 2px 0; font-size:19px;}
+  .detail-head .sub{font-size:12.5px; color:var(--ink-muted); font-weight:600;}
+  .staffrow{
+    display:flex; gap:10px; margin-top:12px; flex-wrap:wrap; align-items:center;
+  }
+  .staffrow label{font-size:12.5px; font-weight:600; color:var(--ink-muted);}
+  .staffrow input[type=text]{
+    flex:1; min-width:160px; border:1px solid var(--line); border-radius:8px;
+    padding:8px 10px; font-family:inherit; font-size:13.5px; outline:none;
+  }
+  .staffrow input[type=text]:focus{border-color:var(--teal);}
+  .last-saved{
+    margin-top:10px; font-size:12px; color:var(--teal-dark); background:var(--ok-bg);
+    display:inline-flex; padding:5px 10px; border-radius:20px; font-weight:600;
+  }
+
+  .section-head{
+    font-size:12.5px; font-weight:700; color:var(--navy); text-transform:none;
+    margin:22px 2px 8px; padding-bottom:6px; border-bottom:2px solid var(--line);
+    letter-spacing:.01em;
+  }
+  .section-head:first-child{margin-top:4px;}
+
+  .item-row{
+    background:var(--surface); border:1px solid var(--line); border-radius:10px;
+    padding:11px 13px; margin-bottom:8px;
+    display:flex; align-items:center; gap:12px; flex-wrap:wrap;
+  }
+  .item-info{flex:1 1 200px; min-width:160px;}
+  .item-label{font-size:13.5px; font-weight:600; color:var(--ink);}
+  .item-hint{font-size:11.5px; color:var(--ink-muted); margin-top:1px;}
+  .item-prev{font-size:11.5px; color:var(--teal-dark); margin-top:3px; font-weight:600;}
+  .item-prev b{font-weight:700;}
+  .item-control{display:flex; align-items:center; gap:8px; flex:0 0 auto;}
+
+  .num-input{
+    width:78px; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-family:'IBM Plex Mono',monospace; font-size:14px; text-align:center; outline:none;
+  }
+  .num-input:focus{border-color:var(--teal);}
+  .txt-input{
+    width:200px; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-family:inherit; font-size:13.5px; outline:none;
+  }
+  .txt-input:focus{border-color:var(--teal);}
+  .date-input{
+    border:1px solid var(--line); border-radius:8px; padding:7px 8px;
+    font-family:inherit; font-size:12.5px; outline:none;
+  }
+
+  .seg{display:flex; border:1px solid var(--line); border-radius:9px; overflow:hidden;}
+  .seg button{
+    border:none; background:var(--surface); padding:8px 13px; font-size:13px; font-weight:600;
+    color:var(--ink-muted); cursor:pointer; transition:background .1s;
+  }
+  .seg button + button{border-left:1px solid var(--line);}
+  .seg button.on-true.active{background:var(--ok-bg); color:var(--ok);}
+  .seg button.on-false.active{background:var(--danger-bg); color:var(--danger);}
+  .seg button:not(.active):hover{background:var(--surface-2);}
+
+  .note-wrap{flex:1 1 100%; margin-top:2px;}
+  .note-wrap textarea{
+    width:100%; border:1px solid var(--line); border-radius:8px; padding:8px 10px;
+    font-family:inherit; font-size:13px; resize:vertical; min-height:38px; outline:none;
+  }
+  .note-wrap textarea:focus{border-color:var(--teal);}
+  .note-wrap .note-tag{font-size:11px; color:var(--warn); font-weight:600; margin-bottom:3px; display:block;}
+
+  .save-bar{
+    position:sticky; bottom:0; background:linear-gradient(180deg, rgba(245,247,247,0), var(--bg) 30%);
+    padding:18px 0 10px; margin-top:10px;
+  }
+  .save-btn{
+    width:100%; background:var(--teal); color:#fff; border:none; border-radius:11px;
+    padding:14px; font-size:15px; font-weight:700; cursor:pointer;
+    box-shadow:0 4px 14px rgba(15,110,99,0.3);
+  }
+  .save-btn:hover{background:var(--teal-dark);}
+  .save-btn:disabled{background:var(--idle); box-shadow:none; cursor:not-allowed;}
+
+  .toast{
+    position:fixed; left:50%; bottom:24px; transform:translateX(-50%);
+    background:var(--teal-dark); color:#fff; padding:10px 18px; border-radius:30px;
+    font-size:13.5px; font-weight:600; box-shadow:0 6px 20px rgba(0,0,0,0.2);
+    z-index:50; opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+  }
+  .toast.show{opacity:1; transform:translateX(-50%) translateY(-4px);}
+
+  .empty-hint{font-size:12px; color:var(--ink-muted); text-align:center; padding:10px 0 2px;}
+
+  @media (prefers-reduced-motion: reduce){
+    *{transition:none !important;}
+  }
+
+  /* ---------- Settings modal ---------- */
+  .modal-backdrop{
+    position:fixed; inset:0; background:rgba(15,30,28,0.45);
+    display:none; align-items:center; justify-content:center; z-index:60; padding:16px;
+  }
+  .modal-backdrop.show{display:flex;}
+  .modal-card{
+    background:var(--surface); border-radius:14px; max-width:420px; width:100%;
+    padding:20px; box-shadow:0 12px 40px rgba(0,0,0,0.25);
+  }
+  .modal-card h3{margin:0 0 8px; font-size:17px; color:var(--teal-dark);}
+  .modal-desc{font-size:12.5px; color:var(--ink-muted); line-height:1.5; margin:0 0 14px;}
+  .modal-label{font-size:12px; font-weight:600; color:var(--ink-muted); display:block; margin-bottom:5px;}
+  .modal-input{
+    width:100%; border:1px solid var(--line); border-radius:8px; padding:9px 10px;
+    font-family:'IBM Plex Mono',monospace; font-size:12.5px; outline:none; margin-bottom:14px;
+  }
+  .modal-input:focus{border-color:var(--teal);}
+  .modal-actions{display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;}
+  .modal-btn{border:none; border-radius:8px; padding:9px 14px; font-size:13px; font-weight:600; cursor:pointer;}
+  .modal-btn.primary{background:var(--teal); color:#fff;}
+  .modal-btn.primary:hover{background:var(--teal-dark);}
+  .modal-btn.ghost{background:var(--surface-2); color:var(--ink);}
+  .modal-btn.ghost.danger{color:var(--danger);}
+  .modal-btn.ghost:hover{background:var(--line);}
+  .sync-note{font-size:11px; margin-top:6px; font-weight:600;}
+  .sync-note.ok{color:var(--ok);}
+  .sync-note.fail{color:var(--danger);}
+</style>
+</head>
+<body>
+
+<div class="appbar">
+  <div class="appbar-inner">
+    <div class="appbar-title">
+      <div class="appbar-tag">ER</div>
+      <div>
+        <h1>ตรวจเช็คของประจำเวร</h1>
+        <span>ห้องฉุกเฉิน · 10 ตำแหน่งประจำจุด</span>
+      </div>
+    </div>
+    <div class="ctrl">
+      <label for="dateInput">วันที่</label>
+      <input type="date" id="dateInput">
+    </div>
+    <div class="ctrl">
+      <label for="shiftInput">เวร</label>
+      <select id="shiftInput">
+        <option value="ดึก">ดึก</option>
+        <option value="เช้า">เช้า</option>
+        <option value="บ่าย">บ่าย</option>
+      </select>
+    </div>
+    <div class="ctrl" id="sheetStatusCtrl" title="สถานะการเชื่อมต่อ Google Sheet API">
+      <span id="sheetStatusDot" class="led idle" style="margin-right:2px;"></span>
+      <label style="cursor:default;">API</label>
+    </div>
+    <button class="ctrl" id="settingsBtn" style="cursor:pointer; font-weight:700;" title="ตั้งค่า Apps Script API URL">⚙ ตั้งค่า</button>
+  </div>
+</div>
+
+<div class="modal-backdrop" id="settingsModal">
+  <div class="modal-card">
+    <h3>เชื่อมต่อ Google Sheet</h3>
+    <p class="modal-desc">วางลิงก์ Apps Script Web App URL ที่ deploy จาก Google Sheet ของคุณ (ดูวิธีทำในไฟล์ README.md ที่มาด้วยกัน) แอปนี้ใช้ Google Sheet เป็นฐานข้อมูลหลัก — ถ้ายังไม่ตั้งค่า จะยังใช้งานบันทึก/ดูข้อมูลไม่ได้</p>
+    <label class="modal-label" for="sheetUrlInput">Apps Script Web App URL</label>
+    <input type="text" id="sheetUrlInput" class="modal-input" placeholder="https://script.google.com/macros/s/XXXXXXXX/exec">
+    <div class="modal-actions">
+      <button class="modal-btn ghost" id="settingsCancel">ยกเลิก</button>
+      <button class="modal-btn ghost danger" id="settingsClear">เลิกเชื่อมต่อ</button>
+      <button class="modal-btn primary" id="settingsSave">บันทึก</button>
+    </div>
+  </div>
+</div>
+
+<div class="container" id="app"></div>
+<div class="toast" id="toast"></div>
+
+<script>
+/* ============ Item builders ============ */
+function N(id,label,hint){ return {id,label,type:'number',hint}; }
+function YN(id,label,opts){ opts=opts||{}; return {id,label,type:'yesno',
+  trueLabel:opts.trueLabel||'มี', falseLabel:opts.falseLabel||'ไม่มี', noteOnFalse:!!opts.noteOnFalse}; }
+function YNE(id,label){ return {id,label,type:'yesno_expiry', trueLabel:'มี', falseLabel:'ไม่มี'}; }
+function TXT(id,label){ return {id,label,type:'text'}; }
+function SEC(label){ return {type:'section', label}; }
+
+/* ============ Position data ============ */
+const POSITIONS = [
+{id:'p1', name:'Incharge', items:[
+  N('i1','อุณหภูมิตู้เย็นยา','2-8 °C'),
+  N('i2','Succinylcholine','5'),
+  N('i3','Esmeron','3'),
+  N('i4','Propofol','5'),
+  N('i5','Ketalar','1'),
+  N('i6','จำนวนเลือด O low titer','4 ถุง'),
+  N('i7','จำนวนเลือด O WB','2 ถุง'),
+  N('i8','อุณหภูมิตู้เย็นเลือด','2-8 °C'),
+  N('i9','Morphine','10'),
+  N('i10','Midazolam','4'),
+  N('i11','Pethidine','4'),
+  N('i12','Fentanyl','5'),
+  N('i13','Etomidate','5'),
+  N('i14','ใบ ยส','2'),
+  N('i15','จำนวน Emergency box','3'),
+  YN('i16','Ipad ให้เลือด'),
+  YN('i17','สายชาร์จ Ipad'),
+  YN('i18','เครื่องยิงบาร์โค้ด'),
+  YN('i19','กุญแจ Royal suite'),
+  YN('i20','กุญแจ OPD นอกเวลา'),
+  SEC('อุปกรณ์ฝากขาย Stock ER'),
+  N('i21','Single Lumen','3'),
+  N('i22','Triple Lumen','3'),
+  N('i23','Close Suction','3'),
+  N('i24','High flow Adult','3'),
+  N('i25','High flow Ped Size L','1'),
+  N('i26','High flow Ped Size XL','1'),
+  N('i27','High flow แบบต่อ TT','1'),
+  SEC('Stock บริจาค'),
+  N('i28','Single Lumen'),
+  N('i29','Double Lumen'),
+  N('i30','Triple Lumen'),
+]},
+{id:'p2', name:'Assist 1', items:[
+  N('i1','Laryngoscope','2'),
+  N('i2','จำนวน Blade','3'),
+  YNE('i3','Magrill forcep (1)'),
+  YNE('i4','Set Umbilical cath (1)'),
+  N('i5','Nebulizer Set','3'),
+  SEC('Facial Mask'),
+  N('i6','Neonatal'),
+  N('i7','Pediatric'),
+  N('i8','Guide wide'),
+  SEC('Endotracheal tube'),
+  N('i9','No. 2.5','2'), N('i10','No. 3.0','2'), N('i11','No. 3.5','2'),
+  N('i12','No. 4.0','2'), N('i13','No. 4.5','2'), N('i14','No. 5.0','2'),
+  N('i15','No. 5.5','2'), N('i16','No. 6.0','2'), N('i17','No. 6.5','2'),
+  SEC('Ambu'),
+  N('i18','Infant 250 ml','2'),
+  N('i19','Pediatric 500 ml','2'),
+  N('i20','O2 sat probe','5'),
+  N('i21','Cuff Ped'),
+  N('i22','สายต่อ cuff BP','1'),
+]},
+{id:'p3', name:'Assist 2', items:[
+  SEC('เครื่อง Monitor Dräger — Zone Emergency'),
+  YN('i1','เครื่องที่ 1',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i2','เครื่องที่ 2',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i3','เครื่องที่ 3',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i4','เครื่องที่ 4',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i5','เครื่องที่ 5',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  SEC('Zone Urgency'),
+  YN('i6','เครื่องที่ 1',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i7','เครื่องที่ 2',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i8','เครื่องที่ 3',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i9','เครื่องที่ 4',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i10','เครื่องที่ 5',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  SEC('Zone Less-Urgency'),
+  YN('i11','เครื่องที่ 1',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i12','เครื่องที่ 2',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i13','เครื่องที่ 3',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YNE('i14','Emergency box'),
+]},
+{id:'p4', name:'Emer 1', items:[
+  SEC('ห้อง Resus 1'),
+  YN('i1','Defibrillator no.1 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i2','Defibrillator no.1 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
+  YN('i3','Central Monitor no.1 (Dräger)',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i4','เครื่อง Ventilator'),
+  YN('i5','ล้อ Emergency',{trueLabel:'พร้อมใช้งาน',falseLabel:'ไม่พร้อม'}),
+  SEC('ห้อง Resus 2'),
+  YN('i6','Defibrillator no.2 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i7','Defibrillator no.2 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
+  YN('i8','Central Monitor no.2 (Dräger)',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i9','เครื่อง Ventilator'),
+  YN('i10','ล้อ Emergency',{trueLabel:'พร้อมใช้งาน',falseLabel:'ไม่พร้อม'}),
+  SEC('ห้อง Resus 3'),
+  YN('i11','Defibrillator no.3 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i12','Defibrillator no.3 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
+  YN('i13','Central Monitor no.3 (Dräger)',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i14','เครื่อง Ventilator'),
+  YN('i15','ล้อ Emergency',{trueLabel:'พร้อมใช้งาน',falseLabel:'ไม่พร้อม'}),
+]},
+{id:'p5', name:'Emer 2', items:[
+  SEC('OPTIMA Infusion pump'),
+  YN('i1','no. 23',{noteOnFalse:true}), YN('i2','no. 24',{noteOnFalse:true}),
+  YN('i3','no. 25',{noteOnFalse:true}), YN('i4','no. 26',{noteOnFalse:true}),
+  YN('i5','no. 27',{noteOnFalse:true}), YN('i6','no. 28',{noteOnFalse:true}),
+  YN('i7','no. 29',{noteOnFalse:true}), YN('i8','no. 30',{noteOnFalse:true}),
+  YN('i9','no. 31',{noteOnFalse:true}), YN('i10','no. 32',{noteOnFalse:true}),
+  YN('i11','no. 33',{noteOnFalse:true}), YN('i12','no. 34',{noteOnFalse:true}),
+  YN('i13','no. 35',{noteOnFalse:true}), YN('i14','no. 36',{noteOnFalse:true}),
+  YN('i15','no. 37',{noteOnFalse:true}), YN('i16','no. 38',{noteOnFalse:true}),
+  SEC('TERUMO Syringe pump (รุ่นเก่า)'),
+  YN('i17','no. 39',{noteOnFalse:true}), YN('i18','no. 40',{noteOnFalse:true}),
+  SEC('MINDRAY Infusion Pump'),
+  YN('i19','no. 1',{noteOnFalse:true}), YN('i20','no. 2',{noteOnFalse:true}), YN('i21','no. 3',{noteOnFalse:true}),
+  SEC('MINDRAY Syringe Pump'),
+  YN('i22','no. 1',{noteOnFalse:true}), YN('i23','no. 2',{noteOnFalse:true}),
+  YN('i24','no. 3',{noteOnFalse:true}), YN('i25','no. 4',{noteOnFalse:true}),
+  SEC('NUORA Blood Warmer (สีเขียว)'),
+  YN('i26','no. 1',{noteOnFalse:true}), YN('i27','no. 2',{noteOnFalse:true}),
+  SEC('LONGERMAY Blood Warmer'),
+  YN('i28','no. 1',{noteOnFalse:true}), YN('i29','no. 2',{noteOnFalse:true}), YN('i30','no. 3',{noteOnFalse:true}),
+  SEC('Doppler'),
+  YN('i31','no. 1',{noteOnFalse:true}), YN('i32','no. 2',{noteOnFalse:true}),
+]},
+{id:'p6', name:'Emer 3', items:[
+  SEC('เครื่อง Ventilator'),
+  N('i1','Carina','3'),
+  N('i2','Monnal T60','4'),
+  N('i3','HAMILTON C1','3'),
+  SEC('เครื่อง Defibrillator'),
+  YN('i4','Defibrillator no.4 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i5','Defibrillator no.4 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
+  YN('i6','Defibrillator no.5 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i7','Defibrillator no.5 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
+  SEC('เครื่อง EKG'),
+  YN('i8','Kenz no.1',{noteOnFalse:true}),
+  YN('i9','Kenz no.2',{noteOnFalse:true}),
+  YN('i10','ECG 1250 no.3',{noteOnFalse:true}),
+  YN('i11','ECG 1250 no.4',{noteOnFalse:true}),
+  YN('i12','NIHON KOHDEN no.5',{noteOnFalse:true}),
+  N('i13','เครื่อง DTX','2'),
+  YN('i14','เครื่อง Ketone Strip',{noteOnFalse:true}),
+]},
+{id:'p7', name:'Urgent 1', items:[
+  SEC('Ambu'),
+  N('i1','ล้อ Emergency','3'),
+  N('i2','Ambu Bag transfer','3'),
+  N('i3','Stock','12'),
+  N('i4','ส่งแลก'),
+  N('i5','ยอดรวม Ambu'),
+  SEC('หนอน'),
+  N('i6','ล้อ Emergency','3'),
+  N('i7','Stock','12'),
+  N('i8','ส่งแลก'),
+  N('i9','ยอดรวมหนอน'),
+  SEC('EZY-IO'),
+  YN('i10','IO Gun',{noteOnFalse:true}),
+  N('i11','IO needle 15 mm'),
+  N('i12','IO needle 25 mm'),
+  N('i13','IO needle 45 mm'),
+  N('i14','จำนวน Clamp ICD','3'),
+]},
+{id:'p8', name:'Urgent 2', items:[
+  YN('i1','เครื่อง Video Laryngoscope',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  N('i2','Magrill forcep','2'),
+  N('i3','Guide rite','10'),
+  N('i4','FOVA','1'),
+  N('i5','Tube Exchange','1'),
+  SEC('Jackson tube'),
+  N('i6','Jackson tube 4 mm','1'),
+  N('i7','Jackson tube 6 mm','1'),
+  N('i8','Jackson tube 7 mm','1'),
+  N('i9','Jackson tube 8 mm','3,1'),
+  N('i10','Jackson tube 9 mm','3'),
+  N('i11','Jackson tube 10 mm','3,1'),
+  N('i12','Jackson tube 11 mm','1'),
+  N('i13','Jackson tube 12 mm','1'),
+  SEC('Shiley tube'),
+  N('i14','Shiley tube no.4','2'),
+  N('i15','Shiley tube no.6','2'),
+  N('i16','Shiley tube no.8','2'),
+]},
+{id:'p9', name:'Negative 1', items:[
+  TXT('i1','Laryngoscope, Blade'),
+  SEC('Endotracheal tube'),
+  N('i2','No 6.5'), N('i3','No 7.0'), N('i4','No 7.5'), N('i5','No 8.0'),
+  YN('i6','ตัวหนอน (1)'),
+  N('i7','Guide rite','1'),
+  YN('i8','Suction tube + Suction container'),
+  SEC('Nebulizer set'),
+  N('i9','Adult','1'),
+  N('i10','Ped','1'),
+  N('i11','Ambu bag Adult','1'),
+  N('i12','O2 Canula','2'),
+  N('i13','Mask c bag','2'),
+  YNE('i14','Emergency box (1)'),
+]},
+{id:'p10', name:'Negative 2', items:[
+  YN('i1','EKG 12 lead + กระดาษ'),
+  YN('i2','เครื่อง Ultrasound + Probe'),
+  YN('i3','เครื่อง DTX + Strip'),
+  SEC('เครื่อง Central Monitor'),
+  YN('i4','ห้องแยก 1',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i5','ห้องแยก 2',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i6','ห้องแยก 3',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i7','ห้องแยก 4',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  SEC('เครื่อง Defibrillation'),
+  YN('i8','อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
+  YN('i9','Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
+  YN('i10','ล้อ IV',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม'}),
+]},
+];
+
+const SHIFT_ORDER = ['ดึก','เช้า','บ่าย'];
+
+/* ============ State ============ */
+const state = {
+  view:'dashboard',
+  date: todayStr(),
+  shift: defaultShift(),
+  posId: null,
+  staffName: '',
+  currentValues: {},     // itemId -> value obj
+  currentMeta: {savedBy:'', savedAt:null},
+  prevValues: null,      // loaded previous-shift entry for open position
+  dashStatus: {},        // posId -> {state:'ok'|'warn'|'idle', by, at}
+  apiUrl: '',
+};
+
+function todayStr(){
+  const d = new Date();
+  const tz = new Date(d.getTime() - d.getTimezoneOffset()*60000);
+  return tz.toISOString().slice(0,10);
+}
+function defaultShift(){
+  const h = new Date().getHours();
+  if(h>=8 && h<16) return 'เช้า';
+  if(h>=16 && h<24) return 'บ่าย';
+  return 'ดึก';
+}
+function addDays(dateStr, n){
+  const d = new Date(dateStr+'T00:00:00');
+  d.setDate(d.getDate()+n);
+  return d.toISOString().slice(0,10);
+}
+function prevShiftOf(dateStr, shift){
+  const idx = SHIFT_ORDER.indexOf(shift);
+  if(idx>0) return {date:dateStr, shift:SHIFT_ORDER[idx-1]};
+  return {date:addDays(dateStr,-1), shift:'บ่าย'};
+}
+function fmtDateThai(dateStr){
+  const d = new Date(dateStr+'T00:00:00');
+  return d.toLocaleDateString('th-TH', {day:'numeric', month:'short', year:'numeric'});
+}
+function entryKey(date, shift, posId){
+  return `chk_${date}_${shift}_${posId}`;
+}
+
+/* ============ API helpers (Google Sheet via Apps Script) ============ */
+async function apiGet(params){
+  if(!state.apiUrl) return null;
+  const qs = new URLSearchParams(params).toString();
+  try{
+    const res = await fetch(`${state.apiUrl}?${qs}`, {method:'GET'});
+    if(!res.ok) return null;
+    return await res.json();
+  }catch(e){
+    console.error('apiGet failed', e);
+    return null;
+  }
+}
+async function apiPost(payload){
+  if(!state.apiUrl) return {ok:false, skipped:true};
+  try{
+    const res = await fetch(state.apiUrl, {
+      method:'POST',
+      headers:{'Content-Type':'text/plain;charset=utf-8'}, // avoids CORS preflight against Apps Script
+      body: JSON.stringify(payload)
+    });
+    let data = null;
+    try{ data = await res.json(); }catch(e){}
+    return {ok: !!(data && data.status==='ok'), data};
+  }catch(e){
+    return {ok:false, error:e};
+  }
+}
+
+async function getEntry(date, shift, posId){
+  const res = await apiGet({action:'entry', date, shift, posId});
+  if(!res || !res.found) return null;
+  return {values: res.values, savedBy: res.savedBy, savedAt: res.savedAt};
+}
+async function getDashboardStatus(date, shift){
+  const res = await apiGet({action:'dashboard', date, shift});
+  return res || {};
+}
+async function setEntry(date, shift, posId, positionName, values, meta, rows){
+  return apiPost({
+    action:'save', date, shift, posId, positionName,
+    values, rows, savedBy: meta.savedBy, savedAt: meta.savedAt
+  });
+}
+
+function loadLastStaffName(){
+  try{ return localStorage.getItem('erLastStaffName') || ''; }catch(e){ return ''; }
+}
+function saveLastStaffName(name){
+  try{ localStorage.setItem('erLastStaffName', name); }catch(e){}
+}
+function loadApiUrl(){
+  try{ return localStorage.getItem('erApiUrl') || ''; }catch(e){ return ''; }
+}
+function saveApiUrl(url){
+  try{ localStorage.setItem('erApiUrl', url); }catch(e){}
+}
+function clearApiUrl(){
+  try{ localStorage.removeItem('erApiUrl'); }catch(e){}
+}
+
+function updateSheetStatusDot(){
+  const dot = document.getElementById('sheetStatusDot');
+  if(!dot) return;
+  dot.className = 'led ' + (state.apiUrl ? 'ok' : 'warn');
+}
+
+function openSettingsModal(){
+  document.getElementById('sheetUrlInput').value = state.apiUrl || '';
+  document.getElementById('settingsModal').classList.add('show');
+}
+function closeSettingsModal(){
+  document.getElementById('settingsModal').classList.remove('show');
+}
+
+/* ============ Evaluate item / entry status ============ */
+function allItems(pos){ return pos.items.filter(it=>it.type!=='section' && !it.type===false); }
+function itemsOnly(pos){ return pos.items.filter(it=>!('label' in it) ? false : it.type!==undefined && it.type!=='section'); }
+function flatItems(pos){ return pos.items.filter(it=>it.type && it.type!=='section'); }
+
+function evalEntry(pos, entry){
+  const items = flatItems(pos);
+  if(!entry || !entry.values) return {answered:0, total:items.length, warn:0};
+  let answered=0, warn=0;
+  items.forEach(it=>{
+    const v = entry.values[it.id];
+    if(v===undefined || v===null) return;
+    if(it.type==='number' && v.val!==undefined && v.val!=='') answered++;
+    else if(it.type==='text' && v.val) answered++;
+    else if(it.type==='yesno' && v.val!==undefined && v.val!==null) { answered++; if(v.val===false) warn++; }
+    else if(it.type==='yesno_expiry' && v.val!==undefined && v.val!==null) { answered++; if(v.val===false) warn++; }
+  });
+  return {answered, total:items.length, warn};
+}
+
+/* ============ Rendering ============ */
+const app = document.getElementById('app');
+
+function showToast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg;
+  t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 1800);
+}
+
+async function renderDashboard(){
+  state.view='dashboard';
+  app.innerHTML = `
+    <div class="summary-strip">
+      <div>
+        <div class="big mono" id="dashCount">–/10</div>
+        <div class="lbl">ตำแหน่งที่เช็คแล้ว · เวร${state.shift} · ${fmtDateThai(state.date)}</div>
+      </div>
+      <div class="dot-legend">
+        <span><i class="led ok"></i>ครบถ้วน</span>
+        <span><i class="led warn"></i>มีรายการต้องระวัง</span>
+        <span><i class="led idle"></i>ยังไม่เช็ค</span>
+      </div>
+    </div>
+    ${!state.apiUrl ? `<div class="empty-hint" style="background:var(--warn-bg); color:var(--warn); border-radius:10px; padding:12px; margin-bottom:14px; font-weight:600;">ยังไม่ได้เชื่อมต่อ Google Sheet — กด ⚙ ตั้งค่า ด้านบนเพื่อวางลิงก์ Apps Script ก่อนเริ่มใช้งาน</div>` : ''}
+    <div class="grid" id="tileGrid"></div>
+  `;
+  const grid = document.getElementById('tileGrid');
+  grid.innerHTML = POSITIONS.map((p,idx)=>`
+    <button class="tile" data-pos="${p.id}">
+      <div class="tile-top">
+        <span class="tile-id mono">P${idx+1}</span>
+        <span class="tile-status idle" id="status-${p.id}">${state.apiUrl?'กำลังโหลด…':'รอเชื่อมต่อ'}</span>
+      </div>
+      <div class="tile-name">${p.name}</div>
+      <div class="tile-meta" id="meta-${p.id}"></div>
+    </button>
+  `).join('');
+  grid.querySelectorAll('.tile').forEach(t=>{
+    t.addEventListener('click', ()=>openPosition(t.dataset.pos));
+  });
+
+  if(!state.apiUrl){
+    document.getElementById('dashCount').textContent = '–/10';
+    return;
+  }
+
+  const dash = await getDashboardStatus(state.date, state.shift);
+  let doneCount = 0;
+  POSITIONS.forEach(p=>{
+    const info = dash[p.id];
+    const statusEl = document.getElementById(`status-${p.id}`);
+    const metaEl = document.getElementById(`meta-${p.id}`);
+    if(!statusEl) return;
+    if(!info || !info.exists){
+      statusEl.className = 'tile-status idle';
+      statusEl.innerHTML = `<i class="led idle"></i>ยังไม่เช็ค`;
+      metaEl.textContent = '';
+    } else {
+      doneCount++;
+      if(info.warn>0){
+        statusEl.className = 'tile-status warn';
+        statusEl.innerHTML = `<i class="led warn"></i>ต้องระวัง ${info.warn}`;
+      } else {
+        statusEl.className = 'tile-status ok';
+        statusEl.innerHTML = `<i class="led ok"></i>เช็คแล้ว`;
+      }
+      metaEl.textContent = `โดย ${info.savedBy || '-'} · ${info.savedAt ? new Date(info.savedAt).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}) : ''}`;
+    }
+  });
+  document.getElementById('dashCount').textContent = `${doneCount}/10`;
+}
+
+async function openPosition(posId){
+  if(!state.apiUrl){
+    openSettingsModal();
+    showToast('กรุณาเชื่อมต่อ Google Sheet ก่อนใช้งาน');
+    return;
+  }
+  const pos = POSITIONS.find(p=>p.id===posId);
+  state.posId = posId;
+  state.view='detail';
+
+  const entry = await getEntry(state.date, state.shift, posId);
+  const prevInfo = prevShiftOf(state.date, state.shift);
+  const prevEntry = await getEntry(prevInfo.date, prevInfo.shift, posId);
+
+  state.currentValues = (entry && entry.values) ? entry.values : {};
+  state.currentMeta = {savedBy: entry?entry.savedBy:'', savedAt: entry?entry.savedAt:null};
+  state.prevValues = prevEntry ? prevEntry.values : null;
+
+  if(!state.staffName){
+    state.staffName = loadLastStaffName();
+  }
+
+  renderDetail(pos, prevInfo, prevEntry);
+}
+
+function fmtPrevVal(item, v){
+  if(v===undefined || v===null) return null;
+  if(item.type==='number') return (v.val===''||v.val===undefined) ? null : v.val;
+  if(item.type==='text') return v.val || null;
+  if(item.type==='yesno'){
+    if(v.val===undefined||v.val===null) return null;
+    const lbl = v.val ? item.trueLabel : item.falseLabel;
+    return v.note ? `${lbl} — ${v.note}` : lbl;
+  }
+  if(item.type==='yesno_expiry'){
+    if(v.val===undefined||v.val===null) return null;
+    if(v.val===true) return `มี (Exp. ${v.expiry||'-'})`;
+    return 'ไม่มี';
+  }
+  return null;
+}
+
+function renderDetail(pos, prevInfo, prevEntry){
+  const posIdx = POSITIONS.findIndex(p=>p.id===pos.id)+1;
+  let html = `
+    <div class="backrow">
+      <button class="backbtn" id="backBtn">← กลับหน้าหลัก</button>
+    </div>
+    <div class="detail-head">
+      <h2>P${posIdx} · ${pos.name}</h2>
+      <div class="sub">เวร${state.shift} · ${fmtDateThai(state.date)} · เทียบกับเวรก่อนหน้า (เวร${prevInfo.shift} ${fmtDateThai(prevInfo.date)})</div>
+      <div class="staffrow">
+        <label for="staffInput">ผู้ตรวจเช็ค</label>
+        <input type="text" id="staffInput" placeholder="ชื่อ-นามสกุล" value="${state.staffName ? escapeHtml(state.staffName) : ''}">
+      </div>
+      ${state.currentMeta.savedAt ? `<div class="last-saved">บันทึกล่าสุดโดย ${escapeHtml(state.currentMeta.savedBy||'-')} เวลา ${new Date(state.currentMeta.savedAt).toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'})}</div>` : ''}
+      ${!prevEntry ? `<div class="empty-hint">ไม่พบข้อมูลของเวรก่อนหน้าสำหรับตำแหน่งนี้</div>` : ''}
+    </div>
+    <form id="checkForm">
+  `;
+
+  pos.items.forEach(it=>{
+    if(it.type==='section'){
+      html += `<div class="section-head">${it.label}</div>`;
+      return;
+    }
+    const cur = state.currentValues[it.id] || {};
+    const prevRaw = state.prevValues ? state.prevValues[it.id] : null;
+    const prevStr = state.prevValues ? fmtPrevVal(it, prevRaw) : null;
+
+    html += `<div class="item-row" data-item="${it.id}" data-type="${it.type}">
+      <div class="item-info">
+        <div class="item-label">${it.label}</div>
+        ${it.hint ? `<div class="item-hint">เป้าหมาย: ${it.hint}</div>` : ''}
+        ${prevStr ? `<div class="item-prev">เวรก่อนหน้า: <b>${escapeHtml(String(prevStr))}</b></div>` : ''}
+      </div>
+      <div class="item-control">`;
+
+    if(it.type==='number'){
+      html += `<input type="number" inputmode="decimal" class="num-input" data-field="val" value="${cur.val!==undefined?cur.val:''}">`;
+    } else if(it.type==='text'){
+      html += `<input type="text" class="txt-input" data-field="val" value="${cur.val?escapeHtml(cur.val):''}">`;
+    } else if(it.type==='yesno'){
+      html += `
+        <div class="seg" data-seg>
+          <button type="button" class="on-true ${cur.val===true?'active':''}" data-val="true">${it.trueLabel}</button>
+          <button type="button" class="on-false ${cur.val===false?'active':''}" data-val="false">${it.falseLabel}</button>
+        </div>`;
+    } else if(it.type==='yesno_expiry'){
+      html += `
+        <div class="seg" data-seg>
+          <button type="button" class="on-true ${cur.val===true?'active':''}" data-val="true">${it.trueLabel}</button>
+          <button type="button" class="on-false ${cur.val===false?'active':''}" data-val="false">${it.falseLabel}</button>
+        </div>
+        <input type="date" class="date-input" data-field="expiry" style="display:${cur.val===true?'inline-block':'none'}" value="${cur.expiry||''}">`;
+    }
+    html += `</div>`;
+
+    if(it.type==='yesno' && it.noteOnFalse){
+      html += `<div class="note-wrap" data-note style="display:${cur.val===false?'block':'none'}">
+        <span class="note-tag">ระบุเพิ่มเติม</span>
+        <textarea data-field="note" placeholder="รายละเอียด...">${cur.note?escapeHtml(cur.note):''}</textarea>
+      </div>`;
+    }
+    html += `</div>`;
+  });
+
+  html += `
+    </form>
+    <div class="save-bar">
+      <button class="save-btn" id="saveBtn">บันทึกผลตรวจเช็ค</button>
+    </div>
+  `;
+
+  app.innerHTML = html;
+  document.getElementById('backBtn').addEventListener('click', renderDashboard);
+  document.getElementById('staffInput').addEventListener('input', e=>{ state.staffName = e.target.value; });
+
+  app.querySelectorAll('.item-row').forEach(row=>{
+    const seg = row.querySelector('[data-seg]');
+    if(seg){
+      seg.querySelectorAll('button').forEach(btn=>{
+        btn.addEventListener('click', ()=>{
+          seg.querySelectorAll('button').forEach(b=>b.classList.remove('active'));
+          btn.classList.add('active');
+          const val = btn.dataset.val === 'true';
+          const dateInput = row.querySelector('[data-field="expiry"]');
+          if(dateInput) dateInput.style.display = val ? 'inline-block' : 'none';
+          const noteWrap = row.querySelector('[data-note]');
+          if(noteWrap) noteWrap.style.display = (val===false) ? 'block' : 'none';
+        });
+      });
+    }
+  });
+
+  document.getElementById('saveBtn').addEventListener('click', async ()=>{
+    if(!state.staffName || !state.staffName.trim()){
+      document.getElementById('staffInput').focus();
+      showToast('กรุณากรอกชื่อผู้ตรวจเช็คก่อนบันทึก');
+      return;
+    }
+    const values = {};
+    app.querySelectorAll('.item-row').forEach(row=>{
+      const id = row.dataset.item;
+      const type = row.dataset.type;
+      const obj = {};
+      if(type==='number'){
+        const v = row.querySelector('[data-field="val"]').value;
+        obj.val = v;
+      } else if(type==='text'){
+        obj.val = row.querySelector('[data-field="val"]').value;
+      } else if(type==='yesno' || type==='yesno_expiry'){
+        const activeBtn = row.querySelector('[data-seg] button.active');
+        obj.val = activeBtn ? (activeBtn.dataset.val==='true') : undefined;
+        if(type==='yesno_expiry'){
+          const d = row.querySelector('[data-field="expiry"]');
+          if(d) obj.expiry = d.value;
+        }
+        const note = row.querySelector('[data-field="note"]');
+        if(note) obj.note = note.value;
+      }
+      values[id] = obj;
+    });
+
+    saveLastStaffName(state.staffName.trim());
+    const meta = {savedBy: state.staffName.trim(), savedAt: new Date().toISOString()};
+
+    const rows = [];
+    pos.items.forEach(it=>{
+      if(it.type==='section') return;
+      const v = values[it.id] || {};
+      let value='', note='', expiry='';
+      if(it.type==='number'){ value = v.val!==undefined ? v.val : ''; }
+      else if(it.type==='text'){ value = v.val || ''; }
+      else if(it.type==='yesno'){
+        value = v.val===true ? it.trueLabel : (v.val===false ? it.falseLabel : '');
+        note = v.note || '';
+      } else if(it.type==='yesno_expiry'){
+        value = v.val===true ? it.trueLabel : (v.val===false ? it.falseLabel : '');
+        expiry = v.expiry || '';
+      }
+      rows.push({label: it.label, value, note, expiry});
+    });
+
+    showToast('กำลังบันทึกเข้า Google Sheet…');
+    const res = await setEntry(state.date, state.shift, pos.id, `P${posIdx} ${pos.name}`, values, meta, rows);
+    showToast(res.ok ? 'บันทึกเข้า Sheet เรียบร้อย' : 'บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อ');
+    if(res.ok) setTimeout(renderDashboard, 700);
+  });
+}
+
+function escapeHtml(s){
+  return String(s).replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+
+/* ============ Top controls ============ */
+const dateInput = document.getElementById('dateInput');
+const shiftInput = document.getElementById('shiftInput');
+dateInput.value = state.date;
+shiftInput.value = state.shift;
+dateInput.addEventListener('change', ()=>{ state.date = dateInput.value; renderDashboard(); });
+shiftInput.addEventListener('change', ()=>{ state.shift = shiftInput.value; renderDashboard(); });
+
+document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+document.getElementById('settingsCancel').addEventListener('click', closeSettingsModal);
+document.getElementById('settingsModal').addEventListener('click', (e)=>{
+  if(e.target.id === 'settingsModal') closeSettingsModal();
+});
+document.getElementById('settingsSave').addEventListener('click', ()=>{
+  const url = document.getElementById('sheetUrlInput').value.trim();
+  state.apiUrl = url;
+  saveApiUrl(url);
+  updateSheetStatusDot();
+  closeSettingsModal();
+  showToast(url ? 'เชื่อมต่อ Google Sheet แล้ว' : 'ยังไม่ได้เชื่อมต่อ Google Sheet');
+  renderDashboard();
+});
+document.getElementById('settingsClear').addEventListener('click', ()=>{
+  state.apiUrl = '';
+  clearApiUrl();
+  updateSheetStatusDot();
+  closeSettingsModal();
+  showToast('เลิกเชื่อมต่อ Google Sheet แล้ว');
+  renderDashboard();
+});
+
+/* ============ Init ============ */
+state.apiUrl = loadApiUrl();
+updateSheetStatusDot();
+renderDashboard();
+if(!state.apiUrl){
+  openSettingsModal();
+}
+</script>
+</body>
+</html>
