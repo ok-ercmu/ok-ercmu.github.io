@@ -284,11 +284,48 @@
     display:flex; flex-direction:column; align-items:center; justify-content:center;
     padding:70px 20px; gap:14px; color:var(--ink-muted); font-size:13.5px; font-weight:600;
   }
+
+  /* ---------- Overlay loader ---------- */
+  .overlay-loader{
+    position:fixed; inset:0; background:rgba(17,32,30,0.4);
+    display:flex; align-items:center; justify-content:center; z-index:90;
+    opacity:0; pointer-events:none; transition:opacity .18s ease;
+  }
+  .overlay-loader.show{opacity:1; pointer-events:all;}
+  .overlay-card{
+    background:#fff; border-radius:18px; padding:26px 34px;
+    box-shadow:0 16px 44px rgba(6,26,23,0.3);
+    display:flex; flex-direction:column; align-items:center; gap:16px; min-width:170px;
+  }
+  .ring-spinner{
+    width:46px; height:46px; position:relative; flex:none;
+  }
+  .ring-spinner::before, .ring-spinner::after{
+    content:''; position:absolute; inset:0; border-radius:50%; border:3.5px solid transparent;
+  }
+  .ring-spinner::before{
+    border-top-color:var(--teal); border-right-color:var(--teal);
+    animation:ring-spin 0.85s cubic-bezier(.5,0,.5,1) infinite;
+  }
+  .ring-spinner::after{
+    border-bottom-color:var(--surface-2); border-left-color:var(--surface-2);
+    animation:ring-spin-rev 1.3s linear infinite;
+  }
+  @keyframes ring-spin{ to{ transform:rotate(360deg); } }
+  @keyframes ring-spin-rev{ to{ transform:rotate(-360deg); } }
+  .overlay-text{font-size:14px; font-weight:700; color:var(--ink); text-align:center; white-space:nowrap;}
 </style>
 </head>
 <body>
 
 <div class="topbar-loader" id="topLoader"></div>
+
+<div class="overlay-loader" id="overlayLoader">
+  <div class="overlay-card">
+    <div class="ring-spinner"></div>
+    <div class="overlay-text" id="overlayText">กำลังโหลด…</div>
+  </div>
+</div>
 
 <div class="appbar">
   <div class="appbar-inner">
@@ -632,6 +669,16 @@ function renderCenterLoader(msg){
     <div>${msg}</div>
   </div>`;
 }
+function showOverlay(msg){
+  const ov = document.getElementById('overlayLoader');
+  const txt = document.getElementById('overlayText');
+  if(txt) txt.textContent = msg || 'กำลังโหลด…';
+  if(ov) ov.classList.add('show');
+}
+function hideOverlay(){
+  const ov = document.getElementById('overlayLoader');
+  if(ov) ov.classList.remove('show');
+}
 
 /* ============ API helpers (Google Sheet via Apps Script) ============ */
 async function apiGet(params){
@@ -672,6 +719,13 @@ async function getEntry(date, shift, posId){
   const res = await apiGet({action:'entry', date, shift, posId});
   if(!res || !res.found) return null;
   return {values: res.values, savedBy: res.savedBy, savedAt: res.savedAt};
+}
+async function getEntryPair(date, shift, posId, prevDate, prevShift){
+  const res = await apiGet({action:'entryPair', date, shift, posId, prevDate, prevShift});
+  if(!res) return {current:null, previous:null};
+  const cur = (res.current && res.current.found) ? {values:res.current.values, savedBy:res.current.savedBy, savedAt:res.current.savedAt} : null;
+  const prev = (res.previous && res.previous.found) ? {values:res.previous.values, savedBy:res.previous.savedBy, savedAt:res.previous.savedAt} : null;
+  return {current: cur, previous: prev};
 }
 async function getDashboardStatus(date, shift){
   const res = await apiGet({action:'dashboard', date, shift});
@@ -785,7 +839,9 @@ async function renderDashboard(){
     return;
   }
 
+  showOverlay('กำลังโหลดสถานะ…');
   const dash = await getDashboardStatus(state.date, state.shift);
+  hideOverlay();
   let doneCount = 0;
   POSITIONS.forEach(p=>{
     const info = dash[p.id];
@@ -821,13 +877,12 @@ async function openPosition(posId){
   state.posId = posId;
   state.view='detail';
 
-  renderCenterLoader(`กำลังโหลดข้อมูล ${pos.name}…`);
+  showOverlay(`กำลังโหลดข้อมูล ${pos.name}…`);
 
   const prevInfo = prevShiftOf(state.date, state.shift);
-  const [entry, prevEntry] = await Promise.all([
-    getEntry(state.date, state.shift, posId),
-    getEntry(prevInfo.date, prevInfo.shift, posId)
-  ]);
+  const {current: entry, previous: prevEntry} = await getEntryPair(state.date, state.shift, posId, prevInfo.date, prevInfo.shift);
+
+  hideOverlay();
 
   state.currentValues = (entry && entry.values) ? entry.values : {};
   state.currentMeta = {savedBy: entry?entry.savedBy:'', savedAt: entry?entry.savedAt:null};
@@ -999,19 +1054,17 @@ function renderDetail(pos, prevInfo, prevEntry){
       rows.push({label: it.label, value, note, expiry});
     });
 
-    showToast('กำลังบันทึกเข้า Google Sheet…');
     const saveBtn = document.getElementById('saveBtn');
-    const originalLabel = saveBtn.innerHTML;
     saveBtn.disabled = true;
-    saveBtn.innerHTML = '<span class="spinner on-dark"></span> กำลังบันทึก…';
+    showOverlay('กำลังบันทึกเข้า Google Sheet…');
 
     const res = await setEntry(state.date, state.shift, pos.id, `P${posIdx} ${pos.name}`, values, meta, rows);
+    hideOverlay();
     showToast(res.ok ? 'บันทึกเข้า Sheet เรียบร้อย' : 'บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อ');
     if(res.ok){
-      setTimeout(renderDashboard, 500);
+      setTimeout(renderDashboard, 400);
     } else {
       saveBtn.disabled = false;
-      saveBtn.innerHTML = originalLabel;
     }
   });
 }
