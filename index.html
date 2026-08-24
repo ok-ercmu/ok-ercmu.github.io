@@ -312,6 +312,15 @@
 <div class="toast" id="toast"></div>
 
 <script>
+/* ============================================================
+   ตั้งค่าลิงก์ Google Apps Script Web App ตรงนี้ที่เดียว (ทำครั้งเดียวก่อน deploy)
+   วางลิงก์ที่ได้จากขั้นตอน Deploy ใน apps-script.gs / README.md
+   ตัวอย่าง: 'https://script.google.com/macros/s/AKfycb.../exec'
+   หลังตั้งค่าตรงนี้แล้ว ทุกเครื่องที่เปิดเว็บนี้จะเชื่อมต่อได้ทันที
+   ไม่ต้องกด ⚙ ตั้งค่า เองทีละเครื่อง (ปุ่มนั้นไว้ใช้เผื่อสลับลิงก์ภายหลัง)
+   ============================================================ */
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/xxxxxxxx/exec';
+
 /* ============ Item builders ============ */
 function N(id,label,hint){ return {id,label,type:'number',hint}; }
 function YN(id,label,opts){ opts=opts||{}; return {id,label,type:'yesno',
@@ -626,7 +635,11 @@ function saveLastStaffName(name){
   try{ localStorage.setItem('erLastStaffName', name); }catch(e){}
 }
 function loadApiUrl(){
-  try{ return localStorage.getItem('erApiUrl') || ''; }catch(e){ return ''; }
+  try{
+    const override = localStorage.getItem('erApiUrl');
+    if(override) return override;
+  }catch(e){}
+  return (DEFAULT_API_URL && !DEFAULT_API_URL.includes('xxxxxxxx')) ? DEFAULT_API_URL : '';
 }
 function saveApiUrl(url){
   try{ localStorage.setItem('erApiUrl', url); }catch(e){}
