@@ -215,6 +215,7 @@
     width:100%; background:var(--teal); color:#fff; border:none; border-radius:11px;
     padding:14px; font-size:15px; font-weight:700; cursor:pointer;
     box-shadow:0 4px 14px rgba(15,110,99,0.3);
+    display:flex; align-items:center; justify-content:center; gap:8px;
   }
   .save-btn:hover{background:var(--teal-dark);}
   .save-btn:disabled{background:var(--idle); box-shadow:none; cursor:not-allowed;}
@@ -261,9 +262,33 @@
   .sync-note{font-size:11px; margin-top:6px; font-weight:600;}
   .sync-note.ok{color:var(--ok);}
   .sync-note.fail{color:var(--danger);}
+
+  /* ---------- Loading indicators ---------- */
+  .topbar-loader{
+    position:fixed; top:0; left:0; height:3px; width:0%;
+    background:linear-gradient(90deg,#2AA98C,#0F6E63);
+    z-index:100; transition:width .35s ease, opacity .25s ease; opacity:0;
+  }
+  .topbar-loader.active{opacity:1; width:75%;}
+  .topbar-loader.done{width:100%; opacity:0;}
+
+  .spinner{
+    width:14px; height:14px; border:2px solid var(--line); border-top-color:var(--teal);
+    border-radius:50%; display:inline-block; animation:er-spin .7s linear infinite; flex:none;
+  }
+  .spinner.lg{width:30px; height:30px; border-width:3px;}
+  .spinner.on-dark{border-color:rgba(255,255,255,0.3); border-top-color:#fff;}
+  @keyframes er-spin{ to{ transform:rotate(360deg); } }
+
+  .center-loader{
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    padding:70px 20px; gap:14px; color:var(--ink-muted); font-size:13.5px; font-weight:600;
+  }
 </style>
 </head>
 <body>
+
+<div class="topbar-loader" id="topLoader"></div>
 
 <div class="appbar">
   <div class="appbar-inner">
@@ -583,10 +608,36 @@ function entryKey(date, shift, posId){
   return `chk_${date}_${shift}_${posId}`;
 }
 
+/* ============ Loading indicator ============ */
+let pendingRequests = 0;
+function showLoading(){
+  pendingRequests++;
+  const bar = document.getElementById('topLoader');
+  if(!bar) return;
+  bar.classList.remove('done');
+  bar.classList.add('active');
+}
+function hideLoading(){
+  pendingRequests = Math.max(0, pendingRequests-1);
+  if(pendingRequests>0) return; // wait for all in-flight requests to finish
+  const bar = document.getElementById('topLoader');
+  if(!bar) return;
+  bar.classList.remove('active');
+  bar.classList.add('done');
+  setTimeout(()=>{ bar.classList.remove('done'); }, 350);
+}
+function renderCenterLoader(msg){
+  app.innerHTML = `<div class="center-loader">
+    <span class="spinner lg"></span>
+    <div>${msg}</div>
+  </div>`;
+}
+
 /* ============ API helpers (Google Sheet via Apps Script) ============ */
 async function apiGet(params){
   if(!state.apiUrl) return null;
   const qs = new URLSearchParams(params).toString();
+  showLoading();
   try{
     const res = await fetch(`${state.apiUrl}?${qs}`, {method:'GET'});
     if(!res.ok) return null;
@@ -594,10 +645,13 @@ async function apiGet(params){
   }catch(e){
     console.error('apiGet failed', e);
     return null;
+  }finally{
+    hideLoading();
   }
 }
 async function apiPost(payload){
   if(!state.apiUrl) return {ok:false, skipped:true};
+  showLoading();
   try{
     const res = await fetch(state.apiUrl, {
       method:'POST',
@@ -609,6 +663,8 @@ async function apiPost(payload){
     return {ok: !!(data && data.status==='ok'), data};
   }catch(e){
     return {ok:false, error:e};
+  }finally{
+    hideLoading();
   }
 }
 
@@ -714,7 +770,7 @@ async function renderDashboard(){
     <button class="tile" data-pos="${p.id}">
       <div class="tile-top">
         <span class="tile-id mono">P${idx+1}</span>
-        <span class="tile-status idle" id="status-${p.id}">${state.apiUrl?'กำลังโหลด…':'รอเชื่อมต่อ'}</span>
+        <span class="tile-status idle" id="status-${p.id}">${state.apiUrl?'<span class=\"spinner\"></span>':'รอเชื่อมต่อ'}</span>
       </div>
       <div class="tile-name">${p.name}</div>
       <div class="tile-meta" id="meta-${p.id}"></div>
@@ -765,9 +821,13 @@ async function openPosition(posId){
   state.posId = posId;
   state.view='detail';
 
-  const entry = await getEntry(state.date, state.shift, posId);
+  renderCenterLoader(`กำลังโหลดข้อมูล ${pos.name}…`);
+
   const prevInfo = prevShiftOf(state.date, state.shift);
-  const prevEntry = await getEntry(prevInfo.date, prevInfo.shift, posId);
+  const [entry, prevEntry] = await Promise.all([
+    getEntry(state.date, state.shift, posId),
+    getEntry(prevInfo.date, prevInfo.shift, posId)
+  ]);
 
   state.currentValues = (entry && entry.values) ? entry.values : {};
   state.currentMeta = {savedBy: entry?entry.savedBy:'', savedAt: entry?entry.savedAt:null};
@@ -940,9 +1000,19 @@ function renderDetail(pos, prevInfo, prevEntry){
     });
 
     showToast('กำลังบันทึกเข้า Google Sheet…');
+    const saveBtn = document.getElementById('saveBtn');
+    const originalLabel = saveBtn.innerHTML;
+    saveBtn.disabled = true;
+    saveBtn.innerHTML = '<span class="spinner on-dark"></span> กำลังบันทึก…';
+
     const res = await setEntry(state.date, state.shift, pos.id, `P${posIdx} ${pos.name}`, values, meta, rows);
     showToast(res.ok ? 'บันทึกเข้า Sheet เรียบร้อย' : 'บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อ');
-    if(res.ok) setTimeout(renderDashboard, 700);
+    if(res.ok){
+      setTimeout(renderDashboard, 500);
+    } else {
+      saveBtn.disabled = false;
+      saveBtn.innerHTML = originalLabel;
+    }
   });
 }
 
