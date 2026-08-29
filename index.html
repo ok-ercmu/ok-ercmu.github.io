@@ -680,6 +680,25 @@ function hideOverlay(){
   if(ov) ov.classList.remove('show');
 }
 
+/* ============ Lightweight client-side cache ============ */
+// Mirrors the server-side cache TTLs so repeat views (e.g. flipping back
+// to the dashboard, or reopening the same position) skip the network
+// round trip entirely instead of re-hitting Apps Script.
+const clientCache = new Map();
+function cacheGet(key, ttlMs){
+  const hit = clientCache.get(key);
+  if(hit && (Date.now() - hit.t) < ttlMs) return hit.v;
+  return undefined;
+}
+function cacheSet(key, value){
+  clientCache.set(key, {v:value, t:Date.now()});
+}
+function cacheInvalidate(prefix){
+  for(const k of clientCache.keys()){
+    if(k.startsWith(prefix)) clientCache.delete(k);
+  }
+}
+
 /* ============ API helpers (Google Sheet via Apps Script) ============ */
 async function apiGet(params){
   if(!state.apiUrl) return null;
@@ -721,15 +740,24 @@ async function getEntry(date, shift, posId){
   return {values: res.values, savedBy: res.savedBy, savedAt: res.savedAt};
 }
 async function getEntryPair(date, shift, posId, prevDate, prevShift){
+  const key = `pair:${date}:${shift}:${posId}:${prevDate}:${prevShift}`;
+  const cached = cacheGet(key, 15000);
+  if(cached) return cached;
   const res = await apiGet({action:'entryPair', date, shift, posId, prevDate, prevShift});
-  if(!res) return {current:null, previous:null};
-  const cur = (res.current && res.current.found) ? {values:res.current.values, savedBy:res.current.savedBy, savedAt:res.current.savedAt} : null;
-  const prev = (res.previous && res.previous.found) ? {values:res.previous.values, savedBy:res.previous.savedBy, savedAt:res.previous.savedAt} : null;
-  return {current: cur, previous: prev};
+  const cur = (res && res.current && res.current.found) ? {values:res.current.values, savedBy:res.current.savedBy, savedAt:res.current.savedAt} : null;
+  const prev = (res && res.previous && res.previous.found) ? {values:res.previous.values, savedBy:res.previous.savedBy, savedAt:res.previous.savedAt} : null;
+  const result = {current: cur, previous: prev};
+  if(res) cacheSet(key, result);
+  return result;
 }
 async function getDashboardStatus(date, shift){
+  const key = `dash:${date}:${shift}`;
+  const cached = cacheGet(key, 15000);
+  if(cached) return cached;
   const res = await apiGet({action:'dashboard', date, shift});
-  return res || {};
+  const result = res || {};
+  if(res) cacheSet(key, result);
+  return result;
 }
 async function setEntry(date, shift, posId, positionName, values, meta, rows){
   return apiPost({
@@ -831,6 +859,7 @@ async function renderDashboard(){
     </button>
   `).join('');
   grid.querySelectorAll('.tile').forEach(t=>{
+    t.addEventListener('pointerdown', ()=>prefetchPosition(t.dataset.pos));
     t.addEventListener('click', ()=>openPosition(t.dataset.pos));
   });
 
@@ -839,9 +868,11 @@ async function renderDashboard(){
     return;
   }
 
-  showOverlay('กำลังโหลดสถานะ…');
+  const dashKey = `dash:${state.date}:${state.shift}`;
+  const dashCached = !!cacheGet(dashKey, 15000);
+  if(!dashCached) showOverlay('กำลังโหลดสถานะ…');
   const dash = await getDashboardStatus(state.date, state.shift);
-  hideOverlay();
+  if(!dashCached) hideOverlay();
   let doneCount = 0;
   POSITIONS.forEach(p=>{
     const info = dash[p.id];
@@ -867,6 +898,18 @@ async function renderDashboard(){
   document.getElementById('dashCount').textContent = `${doneCount}/10`;
 }
 
+/* ============ Speculative prefetch ============ */
+// Kick off the entryPair request the instant a finger/mouse presses a tile
+// (pointerdown), instead of waiting for the full click to register. That
+// overlaps the network round trip with the tap gesture itself, so by the
+// time openPosition() runs, the request is often already in flight or done.
+const pendingPrefetch = {};
+function prefetchPosition(posId){
+  if(!state.apiUrl || pendingPrefetch[posId]) return;
+  const prevInfo = prevShiftOf(state.date, state.shift);
+  pendingPrefetch[posId] = getEntryPair(state.date, state.shift, posId, prevInfo.date, prevInfo.shift);
+}
+
 async function openPosition(posId){
   if(!state.apiUrl){
     openSettingsModal();
@@ -877,12 +920,16 @@ async function openPosition(posId){
   state.posId = posId;
   state.view='detail';
 
-  showOverlay(`กำลังโหลดข้อมูล ${pos.name}…`);
-
   const prevInfo = prevShiftOf(state.date, state.shift);
-  const {current: entry, previous: prevEntry} = await getEntryPair(state.date, state.shift, posId, prevInfo.date, prevInfo.shift);
+  const pairKey = `pair:${state.date}:${state.shift}:${posId}:${prevInfo.date}:${prevInfo.shift}`;
+  const alreadyCached = !!cacheGet(pairKey, 15000);
+  if(!alreadyCached) showOverlay(`กำลังโหลดข้อมูล ${pos.name}…`);
 
-  hideOverlay();
+  const pairPromise = pendingPrefetch[posId] || getEntryPair(state.date, state.shift, posId, prevInfo.date, prevInfo.shift);
+  delete pendingPrefetch[posId];
+  const {current: entry, previous: prevEntry} = await pairPromise;
+
+  if(!alreadyCached) hideOverlay();
 
   state.currentValues = (entry && entry.values) ? entry.values : {};
   state.currentMeta = {savedBy: entry?entry.savedBy:'', savedAt: entry?entry.savedAt:null};
@@ -1062,6 +1109,8 @@ function renderDetail(pos, prevInfo, prevEntry){
     hideOverlay();
     showToast(res.ok ? 'บันทึกเข้า Sheet เรียบร้อย' : 'บันทึกไม่สำเร็จ กรุณาตรวจสอบการเชื่อมต่อ');
     if(res.ok){
+      cacheInvalidate('dash:');
+      cacheInvalidate('pair:');
       setTimeout(renderDashboard, 400);
     } else {
       saveBtn.disabled = false;
