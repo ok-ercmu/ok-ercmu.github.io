@@ -381,7 +381,7 @@
    หลังตั้งค่าตรงนี้แล้ว ทุกเครื่องที่เปิดเว็บนี้จะเชื่อมต่อได้ทันที
    ไม่ต้องกด ⚙ ตั้งค่า เองทีละเครื่อง (ปุ่มนั้นไว้ใช้เผื่อสลับลิงก์ภายหลัง)
    ============================================================ */
-const DEFAULT_API_URL = 'https://script.google.com/macros/s/AKfycbwT3KzswFblhoPyzqdGxKj1C7zJqDqfgd2f2MOgkraNjFIusXKxhJZ3kGXj5AIGjAPs/exec';
+const DEFAULT_API_URL = 'https://script.google.com/macros/s/xxxxxxxx/exec';
 
 /* ============ Item builders ============ */
 function N(id,label,hint){ return {id,label,type:'number',hint}; }
@@ -402,10 +402,13 @@ const POSITIONS = [
   N('i6','จำนวนเลือด O low titer','4 ถุง'),
   N('i7','จำนวนเลือด O WB','2 ถุง'),
   N('i8','อุณหภูมิตู้เย็นเลือด','2-8 °C'),
-  N('i9','Morphine','10'),
+  N('i9','Morphine — คงเหลือ','10'),
+  N('i9b','Morphine — ใช้'),
   N('i10','Midazolam','4'),
-  N('i11','Pethidine','4'),
-  N('i12','Fentanyl','5'),
+  N('i11','Pethidine — คงเหลือ','4'),
+  N('i11b','Pethidine — ใช้'),
+  N('i12','Fentanyl — คงเหลือ','5'),
+  N('i12b','Fentanyl — ใช้'),
   N('i13','Etomidate','5'),
   N('i14','ใบ ยส','2'),
   N('i15','จำนวน Emergency box','3'),
@@ -519,8 +522,6 @@ const POSITIONS = [
   SEC('เครื่อง Defibrillator'),
   YN('i4','Defibrillator no.4 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
   YN('i5','Defibrillator no.4 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
-  YN('i6','Defibrillator no.5 — อุปกรณ์พร้อมใช้',{trueLabel:'พร้อมใช้',falseLabel:'ไม่พร้อม',noteOnFalse:true}),
-  YN('i7','Defibrillator no.5 — Operation check',{trueLabel:'พร้อม',falseLabel:'ไม่พร้อม'}),
   SEC('เครื่อง EKG'),
   YN('i8','Kenz no.1',{noteOnFalse:true}),
   YN('i9','Kenz no.2',{noteOnFalse:true}),
